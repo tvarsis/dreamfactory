@@ -857,17 +857,7 @@ fi
 ### INSTALL Hive ODBC Driver
 php -m | grep -E "^odbc"
 if (($? >= 1)); then
-  echo_with_color blue "    Installing hive odbc...\n" >&5
-  yum update -y
-  yum install -y php-odbc
-  mkdir /opt/hive
-  cd /opt/hive
-  wget http://archive.mapr.com/tools/MapR-ODBC/MapR_Hive/MapRHive_odbc_2.6.1.1001/MapRHiveODBC-2.6.1.1001-1.x86_64.rpm
-  rpm -ivh MapRHiveODBC-2.6.1.1001-1.x86_64.rpm
-  test -f /opt/mapr/hiveodbc/lib/64/libmaprhiveodbc64.so
-  rm MapRHiveODBC-2.6.1.1001-1.x86_64.rpm
-  export HIVE_SERVER_ODBC_DRIVER_PATH=/opt/mapr/hiveodbc/lib/64/libmaprhiveodbc64.so
-  HIVE_ODBC_INSTALLED = $(php -m | grep -E "^odbc")
+  run_process "   Installing hive odbc" install_hive_odbc
   if ((HIVE_ODBC_INSTALLED != "odbc")); then
     echo_with_color red "\nCould not build hive odbc driver." >&5
   else
@@ -1098,21 +1088,7 @@ fi
 
 chown -R "$CURRENT_USER" /opt/dreamfactory && cd /opt/dreamfactory || exit 1
 
-# If Oracle is not installed, add the --ignore-platform-reqs option
-# to composer command
-if [[ $ORACLE == TRUE ]]; then
-  if [[ $CURRENT_USER == "root" ]]; then
-    sudo -u "$CURRENT_USER" COMPOSER_ALLOW_SUPERUSER=1 bash -c "/usr/local/bin/composer install --no-dev"
-  else
-    sudo -u "$CURRENT_USER" bash -c "/usr/local/bin/composer install --no-dev"
-  fi
-else
-  if [[ $CURRENT_USER == "root" ]]; then
-    sudo -u "$CURRENT_USER" COMPOSER_ALLOW_SUPERUSER=1 bash -c "/usr/local/bin/composer install --no-dev --ignore-platform-reqs"
-  else
-    sudo -u "$CURRENT_USER" bash -c "/usr/local/bin/composer install --no-dev --ignore-platform-reqs"
-  fi
-fi
+run_process "   Installing DreamFactory" run_composer_install
 
 ### Shutdown silent mode because php artisan df:setup and df:env will get troubles with prompts.
 exec 1>&5 5>&-

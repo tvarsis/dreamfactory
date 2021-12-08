@@ -14,23 +14,9 @@ run_process () {
   kill $!
 }
 
-# Sudo should be used to run the script, but CURRENT_USER themselves should not be root (i.e should be another user running with sudo),
-# otherwise composer will get annoyed. If the user wishes to continue as root, then an environment variable will be set when 'composer install' is run later on in the script.
-if [[ $CURRENT_USER == "root" ]]; then
-  echo -e "WARNING: Although this script must be run with sudo, it is not recommended to install DreamFactory as root (specifically 'composer' commands) Would you like to:\n [1] Continue as root\n [2] Provide username for installing DreamFactory" >&5
-  read -r INSTALL_AS_ROOT
-  if [[ $INSTALL_AS_ROOT == 1 ]]; then
-    echo -e "Continuing installation as root" >&5
-  else
-    echo -e "Enter username for installing DreamFactory" >&5
-    read -r CURRENT_USER
-    echo -e "User: ${CURRENT_USER} selected. Continuing" >&5
-  fi
-fi
-
-### STEP 1. Install system dependencies
-echo_with_color blue "Step 1: Installing system dependencies...\n" >&5
-apt-get update
+system_update () {
+  apt-get update
+}
 
 install_system_dependencies () {
   if [[ ! -f "/etc/localtime" ]]; then
@@ -703,18 +689,7 @@ if (($? >= 1)); then
     fi
     unzip "$DRIVERS_PATH/instantclient-*.zip" -d /opt/oracle
     if (($? == 0)); then
-      echo_with_color blue "Drivers found. Installing...\n" >&5
-      apt install -y libaio1
-      echo "/opt/oracle/instantclient_19_13" >/etc/ld.so.conf.d/oracle-instantclient.conf
-      echo_with_color blue "    Installing oci8...\n" >&5
-      printf "instantclient,/opt/oracle/instantclient_19_13\n" | pecl install oci8-2.2.0
-      ldconfig
-      if (($? >= 1)); then
-        echo_with_color red "\nOracle instant client installation error" >&5
-        exit 1
-      fi
-      echo "extension=oci8.so" >"/etc/php/${PHP_VERSION_INDEX}/mods-available/oci8.ini"
-      phpenmod -s ALL oci8
+      run_process "   Drivers found. Installing Oracle Drivers" install_oracle
       php -m | grep oci8
       if (($? >= 1)); then
         echo_with_color red "\nCould not install oci8 extension." >&5
@@ -769,33 +744,7 @@ fi
 php -m | grep -E "^cassandra"
 if (($? >= 1)); then
   if [[ $CASSANDRA == TRUE ]]; then
-    echo_with_color blue "    Installing cassandra...\n" >&5
-    if ((CURRENT_OS == 20)); then
-      # multiarch-support is unavailable in ubuntu20, we need to get it from the 18 archive
-      wget http://archive.ubuntu.com/ubuntu/pool/main/g/glibc/multiarch-support_2.27-3ubuntu1_amd64.deb
-      apt install -y ./multiarch-support_2.27-3ubuntu1_amd64.deb
-    fi
-    apt install -y cmake libgmp-dev
-    git clone https://github.com/datastax/php-driver.git /opt/cassandra
-    cd /opt/cassandra/ || exit 1
-    wget http://downloads.datastax.com/cpp-driver/ubuntu/18.04/cassandra/v2.10.0/cassandra-cpp-driver-dbg_2.10.0-1_amd64.deb
-    wget http://downloads.datastax.com/cpp-driver/ubuntu/18.04/cassandra/v2.10.0/cassandra-cpp-driver-dev_2.10.0-1_amd64.deb
-    wget http://downloads.datastax.com/cpp-driver/ubuntu/18.04/cassandra/v2.10.0/cassandra-cpp-driver_2.10.0-1_amd64.deb
-    wget http://downloads.datastax.com/cpp-driver/ubuntu/18.04/dependencies/libuv/v1.23.0/libuv1-dbg_1.23.0-1_amd64.deb
-    wget http://downloads.datastax.com/cpp-driver/ubuntu/18.04/dependencies/libuv/v1.23.0/libuv1-dev_1.23.0-1_amd64.deb
-    wget http://downloads.datastax.com/cpp-driver/ubuntu/18.04/dependencies/libuv/v1.23.0/libuv1_1.23.0-1_amd64.deb
-    dpkg -i *.deb
-    if (($? >= 1)); then
-      echo_with_color red "\ncassandra extension installation error." >&5
-      exit 1
-    fi
-    pecl install ./ext/package.xml
-    if (($? >= 1)); then
-      echo_with_color red "\ncassandra extension installation error." >&5
-      exit 1
-    fi
-    echo "extension=cassandra.so" >"/etc/php/${PHP_VERSION_INDEX}/mods-available/cassandra.ini"
-    phpenmod -s ALL cassandra
+    run_process "   Installing Cassandra" install_cassandra
     php -m | grep cassandra
     if (($? >= 1)); then
       echo_with_color red "\nCould not install cassandra extension." >&5
@@ -1158,21 +1107,7 @@ fi
 
 chown -R "$CURRENT_USER" /opt/dreamfactory && cd /opt/dreamfactory || exit 1
 
-# If Oracle is not installed, add the --ignore-platform-reqs option
-# to composer command
-if [[ $ORACLE == TRUE ]]; then
-  if [[ $CURRENT_USER == "root" ]]; then
-    sudo -u "$CURRENT_USER" COMPOSER_ALLOW_SUPERUSER=1 bash -c "/usr/local/bin/composer install --no-dev"
-  else
-    sudo -u "$CURRENT_USER" bash -c "/usr/local/bin/composer install --no-dev"
-  fi
-else
-  if [[ $CURRENT_USER == "root" ]]; then
-    sudo -u "$CURRENT_USER" COMPOSER_ALLOW_SUPERUSER=1 bash -c "/usr/local/bin/composer install --no-dev --ignore-platform-reqs"
-  else
-    sudo -u "$CURRENT_USER" bash -c "/usr/local/bin/composer install --no-dev --ignore-platform-reqs"
-  fi
-fi
+run_process "   Installing DreamFactory"  run_composer_install
 
 ### Shutdown silent mode because php artisan df:setup and df:env will get troubles with prompts.
 exec 1>&5 5>&-
